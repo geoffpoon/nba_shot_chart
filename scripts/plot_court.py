@@ -14,7 +14,7 @@ import itertools
 import operator
 
 
-#%% define draw_court() function (from MichaelKrueger's script)
+#%% define draw_court() function (from http://savvastjortjoglou.com/nba-shot-sharts.html)
 
 def draw_court(ax=None, color='black', lw=2, outer_lines=False):
     # If an axes object isn't provided to plot onto, just get current one
@@ -32,7 +32,7 @@ def draw_court(ax=None, color='black', lw=2, outer_lines=False):
     backboard = Rectangle((-30, -7.5), 60, -1, linewidth=lw, color=color)
 
     # The paint
-    # Create the outer box 0f the paint, width=16ft, height=19ft
+    # Create the outer box of the paint, width=16ft, height=19ft
     outer_box = Rectangle((-80, -47.5), 160, 190, linewidth=lw, color=color,
                           fill=False)
     # Create the inner box of the paint, widt=12ft, height=19ft
