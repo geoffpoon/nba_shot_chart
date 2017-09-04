@@ -111,6 +111,7 @@ player_shotHist_train
 
 
 ################################################################
+# Likelihood-max for shot count distribution (Log Gaussian Cox Process)
 ################################################################
 
 
@@ -222,3 +223,44 @@ for i in range(n_comp):
     plt.title('Basis vector %d'%(i), fontsize=15)
     plt.axis('off')
 plt.show()
+
+
+################################################################
+# Likelihood-max for FG% distribution (Inhomogeneous Bernouli Process)
+################################################################
+
+# When compared to LGCP, still use a spatially vary field variable zn
+# local success probability (or field goal %, i.e. FG%) is the logistic function of zn
+
+
+def ln_prior(zn_v, det_cov_K, inv_cov_K):
+    part1 = -np.log(2 * np.pi * (det_cov_K**0.5))
+    part2 = -0.5 * np.dot(zn_v, np.dot(inv_cov_K, zn_v))
+    return part1 + part2
+
+def bernouliP_func(z0, zn_v):
+    return np.exp(z0 + zn_v)
+
+def ln_bernouliP_func(z0, zn_v):
+    return z0 + zn_v
+
+def ln_factorial(n):
+    # an improvement of the Sterling Approximation of log(n!)
+    # given by Srinivasa Ramanujan (Ramanujan 1988)
+    # scipy.misc.factorial stops worknig at large values of n
+    sterling = n * np.log(n) - n
+    correct = (1./6) * np.log(n * (1 + 4*n*(1 + 2*n))) + np.log(np.pi)/2
+    return sterling + correct
+
+def ln_likelihood(z0, zn_v, Xn_v):
+    part1 = -lambdaN_func(z0, zn_v)
+    part2 = Xn_v * ln_lambdaN_func(z0, zn_v)
+    part3 = np.nan_to_num(-ln_factorial(Xn_v))
+    #print(np.sum(part1), np.sum(part2), np.sum(part3))
+    #print(part3)
+    return np.sum(part1 + part2 + part3)
+
+def ln_postprob(z, Xn_v, det_cov_K, inv_cov_K):
+    z0 = z[0]
+    zn_v = z[1:]
+    return ln_prior(zn_v, det_cov_K, inv_cov_K) + ln_likelihood(z0, zn_v, Xn_v)
