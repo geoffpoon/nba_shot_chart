@@ -107,7 +107,17 @@ for i, player in enumerate(set(top_players_nameList)):
                                                                         bins=bins, 
                                                                         range=binRange)
     player_shotHist_train[player] = hist2d.flatten()
-player_shotHist_train
+    
+    
+player_shotMadeHist_train = {}
+for i, player in enumerate(set(top_players_nameList)):  
+    temp = train_df[player][train_df[player].SHOT_MADE_FLAG == 1.0]
+    hist2d, xedges, yedges, binnumber = scipy.stats.binned_statistic_2d(temp.LOC_X, temp.LOC_Y, 
+                                                                        temp.SHOT_MADE_FLAG,
+                                                                        statistic='count',
+                                                                        bins=bins, 
+                                                                        range=binRange)
+    player_shotMadeHist_train[player] = hist2d.flatten()
 
 
 ################################################################
@@ -157,14 +167,16 @@ def plot_player_normLambda(player):
     ##########
     extent = np.min(xedges), np.max(xedges), np.max(yedges), np.min(yedges)
     
-    plt.imshow(LAMBDA_v.T, cmap=plt.cm.gist_heat_r, alpha=.9, vmax=0.1,
+#    plt.imshow(LAMBDA_v.T, cmap=plt.cm.gist_heat_r, alpha=.9,
+#               extent=extent)
+    plt.imshow(LAMBDA_v.T, cmap=plt.cm.RdYlBu_r, alpha=.5,
                extent=extent)
     plot_court.draw_court(outer_lines=True, lw=1.5)
     
     plt.xlim(-300,300)
     plt.ylim(-100,500)
     plt.title('%s: LGCP'%(player), fontsize=15)
-    plt.axis('off')
+#    plt.axis('off')
     plt.tight_layout()
     plt.show()
 
@@ -174,7 +186,7 @@ def plot_player_normLambda(player):
 
 
 LL = np.zeros((num_players,np.prod(bins)))
-for i, player in enumerate(player_shotHist_train):
+for i, player in enumerate(top_players_nameList):
     try:
         norm_lambdaN_v = np.loadtxt('player_lambda/norm_lambda_%s.txt'%(player))
     except:
@@ -203,7 +215,7 @@ for i, player in enumerate(player_shotHist_train):
 
 
 n_comp = 10
-model = NMF(n_components=n_comp, init='nndsvd', max_iter=2000, solver='cd', sparseness='components')
+model = NMF(n_components=n_comp, init='nndsvd', max_iter=2000, solver='cd')
 W = model.fit_transform(LL)
 H = model.components_    
 
@@ -214,7 +226,9 @@ for i in range(n_comp):
 
     extent = np.max(xedges), np.min(xedges), np.max(yedges), np.min(yedges)
 
-    plt.imshow(H[i,:].reshape(bins[0],bins[1]).T, cmap=plt.cm.gist_heat_r, alpha=.9, vmax=1,
+#    plt.imshow(H[i,:].reshape(bins[0],bins[1]).T, cmap=plt.cm.gist_heat_r, alpha=.9,
+#               extent=extent)
+    plt.imshow(H[i,:].reshape(bins[0],bins[1]).T, cmap=plt.cm.RdYlBu_r, alpha=.5,
                extent=extent)
     plot_court.draw_court(outer_lines=True, lw=1.)
 
@@ -226,23 +240,22 @@ plt.show()
 
 
 ################################################################
-# Likelihood-max for FG% distribution (Inhomogeneous Bernouli Process)
+# Likelihood-max for FG% distribution (Inhomogeneous Binomial Process)
 ################################################################
 
 # When compared to LGCP, still use a spatially vary field variable zn
 # local success probability (or field goal %, i.e. FG%) is the logistic function of zn
 
 
-def ln_prior(zn_v, det_cov_K, inv_cov_K):
+def ln_prior_binomial(zn_v, det_cov_K, inv_cov_K):
     part1 = -np.log(2 * np.pi * (det_cov_K**0.5))
     part2 = -0.5 * np.dot(zn_v, np.dot(inv_cov_K, zn_v))
     return part1 + part2
 
-def bernouliP_func(z0, zn_v):
-    return np.exp(z0 + zn_v)
-
-def ln_bernouliP_func(z0, zn_v):
-    return z0 + zn_v
+def binomialP_func(z0, zn_v):
+    # Input: field variables
+    # Output: Bernouli success prob (from logistic function)
+    return 1./(1. + np.exp(-(z0 + zn_v)))
 
 def ln_factorial(n):
     # an improvement of the Sterling Approximation of log(n!)
@@ -252,15 +265,116 @@ def ln_factorial(n):
     correct = (1./6) * np.log(n * (1 + 4*n*(1 + 2*n))) + np.log(np.pi)/2
     return sterling + correct
 
-def ln_likelihood(z0, zn_v, Xn_v):
-    part1 = -lambdaN_func(z0, zn_v)
-    part2 = Xn_v * ln_lambdaN_func(z0, zn_v)
-    part3 = np.nan_to_num(-ln_factorial(Xn_v))
+def ln_binomialCoeff(n, k):
+    return ln_factorial(n) - ln_factorial(k) - ln_factorial(n-k)
+
+def ln_likelihood_binomial(z0, zn_v, Xn_made_v, Xn_v):
+    part1 = ln_binomialCoeff(Xn_v, Xn_made_v)
+    part2 = Xn_made_v * np.log(binomialP_func(z0, zn_v))
+    part3 = (Xn_v - Xn_made_v) * np.log(1 - binomialP_func(z0, zn_v))
     #print(np.sum(part1), np.sum(part2), np.sum(part3))
     #print(part3)
     return np.sum(part1 + part2 + part3)
 
-def ln_postprob(z, Xn_v, det_cov_K, inv_cov_K):
+def ln_postprob_binomial(z, Xn_made_v, Xn_v, det_cov_K, inv_cov_K):
     z0 = z[0]
     zn_v = z[1:]
-    return ln_prior(zn_v, det_cov_K, inv_cov_K) + ln_likelihood(z0, zn_v, Xn_v)
+    return ln_prior_binomial(zn_v, det_cov_K, inv_cov_K) + ln_likelihood(z0, zn_v, Xn_v)
+
+
+################################################################
+################################################################
+    
+def plot_player_fgPercent(player):
+    fgPercent_v = np.loadtxt('player_FGp/FGpercent_%s.txt'%(player))
+    FGper_v = np.reshape(fgPercent_v, bins)
+    ##########
+    extent = np.min(xedges), np.max(xedges), np.max(yedges), np.min(yedges)
+    
+    plt.imshow(FGper_v.T, cmap=plt.cm.RdYlBu_r, alpha=.5, vmax=1.,
+               extent=extent)
+    plot_court.draw_court(outer_lines=True, lw=1.5)
+    
+    plt.xlim(-300,300)
+    plt.ylim(-100,500)
+    plt.title('%s: est FG percent'%(player), fontsize=15)
+#    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+
+################################################################
+################################################################
+
+player = 'Kevin Durant'
+try:
+    fgPercent_v = np.loadtxt('player_FGp/FGpercent_%s.txt'%(player))
+except:
+    Xn_v = player_shotHist_train[player]
+    Xn_made_v = player_shotMadeHist_train[player]
+#    z0_guess = -np.log((float(np.sum(Xn_v)) / np.sum(Xn_made_v)) - 1)
+    z0_guess = -10.0
+    zn_v_guess = np.zeros(len(Xn_v))
+    z_guess = np.append(z0_guess, zn_v_guess)
+    
+    neg_logLike = lambda *args: -ln_postprob_binomial(*args)
+    result = scipy.optimize.minimize(neg_logLike, z_guess, 
+                                     args=(Xn_made_v, Xn_v, det_cov_K, inv_cov_K))
+    z_MaxLike = result["x"]
+    z0_MaxLike = z_MaxLike[0]
+    zn_MaxLike = z_MaxLike[1:]
+    fgPercent_v = binomialP_func(z0_MaxLike, zn_MaxLike)
+    np.savetxt('player_FGp/FGpercent_%s.txt'%(player), fgPercent_v)
+
+plot_player_fgPercent(player)
+plot_player_normLambda(player)
+
+#FGper = np.zeros((num_players,np.prod(bins)))
+#for i, player in enumerate(top_players_nameList):
+#    try:
+#        fgPercent_v = np.loadtxt('player_FGp/FGpercent_%s.txt'%(player))
+#    except:
+#        Xn_v = player_shotHist_train[player]
+#        Xn_made_v = player_shotMadeHist_train[player]
+#        z0_guess = -np.log((float(len(Xn_v)) / len(Xn_made_v)) - 1)
+#        zn_v_guess = np.zeros(len(Xn_v))
+#        z_guess = np.append(z0_guess, zn_v_guess)
+#    
+#        neg_logLike = lambda *args: -ln_postprob_binomial(*args)
+#        result = scipy.optimize.minimize(neg_logLike, z_guess, 
+#                                         args=(Xn_made_v, Xn_v, det_cov_K, inv_cov_K))
+#        z_MaxLike = result["x"]
+#        z0_MaxLike = z_MaxLike[0]
+#        zn_MaxLike = z_MaxLike[1:]
+#        fgPercent_v = binomialP_func(z0_MaxLike, zn_MaxLike)
+#    
+#        np.savetxt('player_FGp/FGpercent_%s.txt'%(player), fgPercent_v)
+#    print(player)
+#    FGper[i,:] = fgPercent_v[:]
+    
+    
+################################################################
+################################################################
+
+
+#n_comp = 10
+#model = NMF(n_components=n_comp, init='nndsvd', max_iter=2000, solver='cd')
+#W = model.fit_transform(LL)
+#H = model.components_    
+#
+#
+#plt.figure(figsize=(20,14))
+#for i in range(n_comp):
+#    plt.subplot(2, n_comp/2 + 1, i+1)
+#
+#    extent = np.max(xedges), np.min(xedges), np.max(yedges), np.min(yedges)
+#
+#    plt.imshow(H[i,:].reshape(bins[0],bins[1]).T, cmap=plt.cm.gist_heat_r, alpha=.9,
+#               extent=extent)
+#    plot_court.draw_court(outer_lines=True, lw=1.)
+#
+#    plt.xlim(-300,300)
+#    plt.ylim(-100,500)
+#    plt.title('Basis vector %d'%(i), fontsize=15)
+#    plt.axis('off')
+#plt.show()
