@@ -8,7 +8,6 @@ import seaborn as sns
 
 import plot_court
 import sklearn.model_selection
-import pymc3 as pm
 import emcee
 from sklearn.decomposition import NMF
 
@@ -82,7 +81,7 @@ inv_cov_K = np.linalg.inv(cov_K)
 ################################################################
 
 
-num_players = 100
+num_players = 350
 top_players_shotNum = df.PLAYER_NAME.value_counts()[:num_players]
 top_players_nameList = top_players_shotNum.index.tolist()
 
