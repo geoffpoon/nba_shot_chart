@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools
 import scipy
+import os
 
 import seaborn as sns
 
 import plot_court
 import sklearn.model_selection
-import emcee
 from sklearn.decomposition import NMF
 
 
@@ -92,9 +92,10 @@ top_players_nameList = top_players_shotNum.index.tolist()
 
 train_df = {}
 test_df = {}
+randSeed = 348098
 for i, player in enumerate(set(top_players_nameList)):  
     temp = df[df.PLAYER_NAME == player]
-    train_df[player], test_df[player] = sklearn.model_selection.train_test_split(temp, test_size = 0.2)
+    train_df[player], test_df[player] = sklearn.model_selection.train_test_split(temp, test_size=0.2, random_state=randSeed)
 
     
 player_shotHist_train = {}
@@ -183,11 +184,13 @@ def plot_player_normLambda(player):
 ################################################################
 ################################################################
 
-
+directory = 'player_lambda_seed%d'%(randSeed)
+if not os.path.exists(directory):
+    os.makedirs(directory)
 LL = np.zeros((num_players,np.prod(bins)))
 for i, player in enumerate(top_players_nameList):
     try:
-        norm_lambdaN_v = np.loadtxt('player_lambda/norm_lambda_%s.txt'%(player))
+        norm_lambdaN_v = np.loadtxt('player_lambda_seed%d/norm_lambda_%s.txt'%(randSeed, player))
     except:
         Xn_v = player_shotHist_train[player]
         z0_guess = np.log(np.mean(Xn_v))
@@ -203,7 +206,7 @@ for i, player in enumerate(top_players_nameList):
         lambdaN_v = np.exp(z0_MaxLike + zn_MaxLike)
         norm_lambdaN_v = lambdaN_v / np.sum(lambdaN_v)
     
-        np.savetxt('player_lambda/norm_lambda_%s.txt'%(player), norm_lambdaN_v)
+        np.savetxt('player_lambda_seed%d/norm_lambda_%s.txt'%(randSeed, player), norm_lambdaN_v)
     print(player)
     LL[i,:] = norm_lambdaN_v[:]
 
@@ -305,25 +308,32 @@ def plot_player_fgPercent(player):
 ################################################################
 ################################################################
 
+phi2 = 25.**2
+sigma2 = 5.
+
+cov_K = cov_func(dist_matrix, sigma2, phi2)
+det_cov_K = np.linalg.det(cov_K)
+inv_cov_K = np.linalg.inv(cov_K)
+
+################################################################
+################################################################
+
 player = 'Kevin Durant'
-try:
-    fgPercent_v = np.loadtxt('player_FGp/FGpercent_%s.txt'%(player))
-except:
-    Xn_v = player_shotHist_train[player]
-    Xn_made_v = player_shotMadeHist_train[player]
-#    z0_guess = -np.log((float(np.sum(Xn_v)) / np.sum(Xn_made_v)) - 1)
-    z0_guess = -10.0
-    zn_v_guess = np.zeros(len(Xn_v))
-    z_guess = np.append(z0_guess, zn_v_guess)
-    
-    neg_logLike = lambda *args: -ln_postprob_binomial(*args)
-    result = scipy.optimize.minimize(neg_logLike, z_guess, 
-                                     args=(Xn_made_v, Xn_v, det_cov_K, inv_cov_K))
-    z_MaxLike = result["x"]
-    z0_MaxLike = z_MaxLike[0]
-    zn_MaxLike = z_MaxLike[1:]
-    fgPercent_v = binomialP_func(z0_MaxLike, zn_MaxLike)
-    np.savetxt('player_FGp/FGpercent_%s.txt'%(player), fgPercent_v)
+
+Xn_v = player_shotHist_train[player]
+Xn_made_v = player_shotMadeHist_train[player]
+z0_guess = -np.log((float(np.sum(Xn_v)) / np.sum(Xn_made_v)) - 1)
+zn_v_guess = np.zeros(len(Xn_v))
+z_guess = np.append(z0_guess, zn_v_guess)
+
+neg_logLike = lambda *args: -ln_postprob_binomial(*args)
+result = scipy.optimize.minimize(neg_logLike, z_guess, 
+                                 args=(Xn_made_v, Xn_v, det_cov_K, inv_cov_K))
+z_MaxLike = result["x"]
+z0_MaxLike = z_MaxLike[0]
+zn_MaxLike = z_MaxLike[1:]
+fgPercent_v = binomialP_func(z0_MaxLike, zn_MaxLike)
+np.savetxt('player_FGp/FGpercent_%s.txt'%(player), fgPercent_v)
 
 plot_player_fgPercent(player)
 plot_player_normLambda(player)
