@@ -162,7 +162,7 @@ def ln_postprob(z, Xn_v, det_cov_K, inv_cov_K):
 ################################################################
     
 def plot_player_normLambda(player):
-    norm_lambdaN_v = np.loadtxt('player_lambda/norm_lambda_%s.txt'%(player))
+    norm_lambdaN_v = np.loadtxt('player2013_lambda_seed%d/norm_lambda_%s.txt'%(player))
     LAMBDA_v = np.reshape(norm_lambdaN_v, bins)
     ##########
     extent = np.min(xedges), np.max(xedges), np.max(yedges), np.min(yedges)
@@ -184,13 +184,13 @@ def plot_player_normLambda(player):
 ################################################################
 ################################################################
 
-directory = 'player_lambda_seed%d'%(randSeed)
+directory = 'player2013_lambda_seed%d'%(randSeed)
 if not os.path.exists(directory):
     os.makedirs(directory)
 LL = np.zeros((num_players,np.prod(bins)))
 for i, player in enumerate(top_players_nameList):
     try:
-        norm_lambdaN_v = np.loadtxt('player_lambda_seed%d/norm_lambda_%s.txt'%(randSeed, player))
+        norm_lambdaN_v = np.loadtxt('player2013_lambda_seed%d/norm_lambda_%s.txt'%(randSeed, player))
     except:
         Xn_v = player_shotHist_train[player]
         z0_guess = np.log(np.mean(Xn_v))
@@ -206,7 +206,7 @@ for i, player in enumerate(top_players_nameList):
         lambdaN_v = np.exp(z0_MaxLike + zn_MaxLike)
         norm_lambdaN_v = lambdaN_v / np.sum(lambdaN_v)
     
-        np.savetxt('player_lambda_seed%d/norm_lambda_%s.txt'%(randSeed, player), norm_lambdaN_v)
+        np.savetxt('player2013_lambda_seed%d/norm_lambda_%s.txt'%(randSeed, player), norm_lambdaN_v)
     print(player)
     LL[i,:] = norm_lambdaN_v[:]
 
